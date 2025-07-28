@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>動畫版 Bloch 球量子門模擬器（改進控制）</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 500px;
+            gap: 30px;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: linear-gradient(to bottom, #f8f8f8, #e8e8e8);
+        }
+        .camera-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        .camera-btn {
+            padding: 8px 16px;
+            background-color: rgba(33, 150, 243, 0.9);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .camera-btn:hover {
+            background-color: rgba(33, 150, 243, 1);
+            transform: translateY(-1px);
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .gate-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .gate-btn {
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .gate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .gate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: normal;
+            white-space: nowrap;
+            z-index: 1000;
+            margin-bottom: 5px;
+        }
+        .gate-btn:hover .tooltip {
+            display: block;
+        }
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: rgba(0,0,0,0.9);
+        }
+        .gate-x { background-color: #f44336; color: white; }
+        .gate-y { background-color: #4caf50; color: white; }
+        .gate-z { background-color: #2196f3; color: white; }
+        .gate-h { background-color: #ff9800; color: white; }
+        .gate-s { background-color: #9c27b0; color: white; }
+        .gate-t { background-color: #795548; color: white; }
+        .gate-reset { background-color: #607d8b; color: white; }
+        
+        .state-info {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        .complex-state {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .phase-display {
+            font-size: 16px;
+            color: #333;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+        .history {
+            background-color: #e8f5e9;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .history-item {
+            padding: 5px;
+            margin: 2px 0;
+            background-color: white;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .measurement-prob {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .prob-bar {
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .prob-fill {
+            height: 100%;
+            background-color: #4caf50;
+            transition: width 0.3s ease;
+        }
+        h1 { text-align: center; color: #333; }
+        h3 { color: #666; margin-top: 20px; }
+        .axis-info {
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .axis-info div {
+            margin: 3px 0;
+        }
+        .x-axis { color: #f44336; font-weight: bold; }
+        .y-axis { color: #4caf50; font-weight: bold; }
+        .z-axis { color: #2196f3; font-weight: bold; }
+        .animation-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .speed-control {
+            flex: 1;
+        }
+        .speed-control label {
+            font-size: 12px;
+            color: #666;
+        }
+        .speed-slider {
+            width: 100%;
+            margin-top: 5px;
+        }
+        #animation-status {
+            text-align: center;
+            padding: 10px;
+            background-color: #fff3e0;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-weight: bold;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .control-tip {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 動畫版 Bloch 球量子門模擬器（改進控制）</h1>
+        
+        <div class="main-content">
+            <div>
+                <div id="canvas-container">
+                    <div class="camera-controls">
+                        <button class="camera-btn" onclick="resetCamera()">🎥 重置視角</button>
+                        <button class="camera-btn" onclick="toggleAutoRotate()">🔄 自動旋轉</button>
+                    </div>
+                    <div class="control-tip">
+                        🖱️ 左鍵拖動：旋轉 | 右鍵拖動：平移 | 滾輪：縮放
+                    </div>
+                </div>
+                <div id="animation-status">準備就緒</div>
+            </div>
+            
+            <div class="controls">
+                <div class="axis-info">
+                    <div><span class="x-axis">X 軸：</span>實部疊加態 |+⟩ 和 |-⟩</div>
+                    <div><span class="y-axis">Y 軸：</span>虛部疊加態 |+i⟩ 和 |-i⟩</div>
+                    <div><span class="z-axis">Z 軸：</span>計算基態 |0⟩（北極）和 |1⟩（南極）</div>
+                </div>
+                
+                <div>
+                    <h3>量子門控制</h3>
+                    <div class="gate-buttons">
+                        <button class="gate-btn gate-x" onclick="applyGate('X')">
+                            X 門
+                            <div class="tooltip">繞 X 軸旋轉 180°<br>|0⟩ ↔ |1⟩（位元翻轉）</div>
+                        </button>
+                        <button class="gate-btn gate-y" onclick="applyGate('Y')">
+                            Y 門
+                            <div class="tooltip">繞 Y 軸旋轉 180°<br>|0⟩ → i|1⟩, |1⟩ → -i|0⟩</div>
+                        </button>
+                        <button class="gate-btn gate-z" onclick="applyGate('Z')">
+                            Z 門
+                            <div class="tooltip">繞 Z 軸旋轉 180°<br>|1⟩ → -|1⟩（相位翻轉）</div>
+                        </button>
+                        <button class="gate-btn gate-h" onclick="applyGate('H')">
+                            H 門
+                            <div class="tooltip">創建疊加態<br>|0⟩ → (|0⟩+|1⟩)/√2<br>|1⟩ → (|0⟩-|1⟩)/√2</div>
+                        </button>
+                        <button class="gate-btn gate-s" onclick="applyGate('S')">
+                            S 門
+                            <div class="tooltip">繞 Z 軸旋轉 90°<br>|1⟩ → i|1⟩（π/2 相位）</div>
+                        </button>
+                        <button class="gate-btn gate-t" onclick="applyGate('T')">
+                            T 門
+                            <div class="tooltip">繞 Z 軸旋轉 45°<br>|1⟩ → e^(iπ/4)|1⟩（π/4 相位）</div>
+                        </button>
+                        <button class="gate-btn gate-reset" onclick="resetState()" style="grid-column: span 3;">
+                            重置到 |0⟩
+                            <div class="tooltip">回到初始狀態 |0⟩</div>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="animation-controls">
+                    <div class="speed-control">
+                        <label for="speed-slider">動畫速度</label>
+                        <input type="range" id="speed-slider" class="speed-slider" 
+                               min="500" max="3000" value="1500" step="100">
+                        <span id="speed-value">1.5 秒</span>
+                    </div>
+                </div>
+                
+                <div class="state-info">
+                    <h3>當前量子態</h3>
+                    <div id="state-vector" class="phase-display">|ψ⟩ = 1.00|0⟩ + 0.00|1⟩</div>
+                    <div id="complex-state" class="complex-state"></div>
+                    <div id="bloch-coords">Bloch 座標: (0.00, 0.00, 1.00)</div>
+                    <div id="angles">θ = 0.00°, φ = 0.00°</div>
+                    
+                    <h4>測量機率</h4>
+                    <div class="measurement-prob">
+                        <div>
+                            <div>|0⟩: <span id="prob0">100.0%</span></div>
+                            <div class="prob-bar">
+                                <div class="prob-fill" id="prob0-bar" style="width: 100%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div>|1⟩: <span id="prob1">0.0%</span></div>
+                            <div class="prob-bar">
+                                <div class="prob-fill" id="prob1-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="history">
+                    <h3>操作歷史</h3>
+                    <div id="history-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 三維場景設置
+        let scene, camera, renderer, sphere, arrow, controls;
+        let stateVector = [[1, 0], [0, 0]]; // Complex representation [real, imag]
+        let history = [];
+        let rotationAxis = null;
+        let rotationAxisHelper = null;
+        let isAnimating = false;
+        let pathCurve = null;
+        let pathLine = null;
+        let autoRotate = false;
+        
+        // 預設相機位置
+        const DEFAULT_CAMERA_POSITION = { x: 4, y: 3, z: 5 };
+        
+        // 初始化 Three.js
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf8f8f8);
+            
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(DEFAULT_CAMERA_POSITION.x, DEFAULT_CAMERA_POSITION.y, DEFAULT_CAMERA_POSITION.z);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            container.appendChild(renderer.domElement);
+            
+            // 使用 OrbitControls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.rotateSpeed = 0.8;
+            controls.zoomSpeed = 1.2;
+            controls.panSpeed = 0.8;
+            controls.minDistance = 3;
+            controls.maxDistance = 10;
+            controls.target.set(0, 0, 0);
+            controls.update();
+            
+            // 添加光源
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+            
+            // 創建 Bloch 球
+            const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const sphereMaterial = new THREE.MeshPhongMaterial({
+                color: 0xe0e0e0,
+                transparent: true,
+                opacity: 0.3,
+                wireframe: true
+            });
+            sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            scene.add(sphere);
+            
+            // 添加座標軸
+            const axesHelper = new THREE.AxesHelper(1.5);
+            scene.add(axesHelper);
+            
+            // 添加軸標籤
+            const xLabel = createTextSprite('X', '#f44336');
+            xLabel.position.set(1.7, 0, 0);
+            scene.add(xLabel);
+            
+            const yLabel = createTextSprite('Y', '#4caf50');
+            yLabel.position.set(0, 1.7, 0);
+            scene.add(yLabel);
+            
+            const zLabel = createTextSprite('Z', '#2196f3');
+            zLabel.position.set(0, 0, 1.7);
+            scene.add(zLabel);
+            
+            // 添加特殊點標記
+            addSpecialPoints();
+            
+            // 創建狀態向量箭頭
+            const arrowDirection = new THREE.Vector3(0, 0, 1);
+            const arrowOrigin = new THREE.Vector3(0, 0, 0);
+            const arrowLength = 1;
+            const arrowColor = 0xff0000;
+            arrow = new THREE.ArrowHelper(arrowDirection, arrowOrigin, arrowLength, arrowColor, 0.3, 0.2);
+            scene.add(arrow);
+            
+            // 添加赤道圓環
+            const equatorGeometry = new THREE.RingGeometry(0.98, 1.02, 64);
+            const equatorMaterial = new THREE.MeshBasicMaterial({ color: 0x888888, side: THREE.DoubleSide });
+            const equator = new THREE.Mesh(equatorGeometry, equatorMaterial);
+            equator.rotation.x = Math.PI / 2;
+            scene.add(equator);
+            
+            // 速度滑塊
+            const speedSlider = document.getElementById('speed-slider');
+            const speedValue = document.getElementById('speed-value');
+            speedSlider.addEventListener('input', (e) => {
+                const value = e.target.value / 1000;
+                speedValue.textContent = `${value.toFixed(1)} 秒`;
+            });
+            
+            animate();
+        }
+        
+        function createTextSprite(text, color) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 64;
+            canvas.height = 64;
+            context.font = 'Bold 48px Arial';
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, 32, 32);
+            
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(0.5, 0.5, 1);
+            return sprite;
+        }
+        
+        function addSpecialPoints() {
+            // |0⟩ 北極
+            addPoint(0, 0, 1, '|0⟩', 0x0000ff);
+            // |1⟩ 南極
+            addPoint(0, 0, -1, '|1⟩', 0x0000ff);
+            // |+⟩ +X
+            addPoint(1, 0, 0, '|+⟩', 0xff0000);
+            // |-⟩ -X
+            addPoint(-1, 0, 0, '|-⟩', 0xff0000);
+            // |+i⟩ +Y
+            addPoint(0, 1, 0, '|+i⟩', 0x00ff00);
+            // |-i⟩ -Y
+            addPoint(0, -1, 0, '|-i⟩', 0x00ff00);
+        }
+        
+        function addPoint(x, y, z, label, color) {
+            const geometry = new THREE.SphereGeometry(0.05, 16, 16);
+            const material = new THREE.MeshBasicMaterial({ color: color });
+            const point = new THREE.Mesh(geometry, material);
+            point.position.set(x, y, z);
+            scene.add(point);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update(); // 更新控制器
+            
+            if (autoRotate && !isAnimating) {
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 2.0;
+            } else {
+                controls.autoRotate = false;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // 重置相機視角
+        function resetCamera() {
+            // 創建平滑過渡動畫
+            const currentPosition = camera.position.clone();
+            const targetPosition = new THREE.Vector3(
+                DEFAULT_CAMERA_POSITION.x,
+                DEFAULT_CAMERA_POSITION.y,
+                DEFAULT_CAMERA_POSITION.z
+            );
+            
+            const tween = new TWEEN.Tween(currentPosition)
+                .to(targetPosition, 1000)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onUpdate(() => {
+                    camera.position.copy(currentPosition);
+                    camera.lookAt(0, 0, 0);
+                    controls.target.set(0, 0, 0);
+                })
+                .start();
+                
+            // 重置控制器
+            controls.reset();
+            
+            document.getElementById('animation-status').textContent = '視角已重置';
+        }
+        
+        // 切換自動旋轉
+        function toggleAutoRotate() {
+            autoRotate = !autoRotate;
+            const btn = event.target;
+            if (autoRotate) {
+                btn.textContent = '⏸️ 停止旋轉';
+                document.getElementById('animation-status').textContent = '自動旋轉已開啟';
+            } else {
+                btn.textContent = '🔄 自動旋轉';
+                document.getElementById('animation-status').textContent = '自動旋轉已關閉';
+            }
+        }
+        
+        // 顯示旋轉軸
+        function showRotationAxis(axis, angle) {
+            // 移除舊的旋轉軸
+            if (rotationAxisHelper) {
+                scene.remove(rotationAxisHelper);
+            }
+            
+            // 創建旋轉軸
+            const origin = new THREE.Vector3(0, 0, 0);
+            const direction = axis.normalize();
+            const length = 2;
+            const color = 0xffff00; // 黃色
+            
+            rotationAxisHelper = new THREE.ArrowHelper(direction, origin, length, color, 0.5, 0.3);
+            scene.add(rotationAxisHelper);
+            
+            // 動畫結束後移除
+            setTimeout(() => {
+                if (rotationAxisHelper) {
+                    scene.remove(rotationAxisHelper);
+                    rotationAxisHelper = null;
+                }
+            }, parseInt(document.getElementById('speed-slider').value) + 500);
+        }
+        
+        // 創建球面路徑
+        function createSphericalPath(startVec, endVec, axis, angle) {
+            // 移除舊路徑
+            if (pathLine) {
+                scene.remove(pathLine);
+            }
+            
+            // 生成球面上的路徑點
+            const numPoints = 50;
+            const points = [];
+            
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i / numPoints;
+                const currentAngle = angle * t;
+                
+                // 使用羅德里格旋轉公式
+                const cosAngle = Math.cos(currentAngle);
+                const sinAngle = Math.sin(currentAngle);
+                const oneMinusCos = 1 - cosAngle;
+                
+                // 旋轉矩陣
+                const rotMatrix = new THREE.Matrix4();
+                const x = axis.x, y = axis.y, z = axis.z;
+                
+                rotMatrix.set(
+                    cosAngle + x * x * oneMinusCos,     x * y * oneMinusCos - z * sinAngle, x * z * oneMinusCos + y * sinAngle, 0,
+                    y * x * oneMinusCos + z * sinAngle, cosAngle + y * y * oneMinusCos,     y * z * oneMinusCos - x * sinAngle, 0,
+                    z * x * oneMinusCos - y * sinAngle, z * y * oneMinusCos + x * sinAngle, cosAngle + z * z * oneMinusCos,     0,
+                    0, 0, 0, 1
+                );
+                
+                // 應用旋轉
+                const point = startVec.clone();
+                point.applyMatrix4(rotMatrix);
+                points.push(point);
+            }
+            
+            // 創建曲線
+            pathCurve = new THREE.CatmullRomCurve3(points);
+            
+            // 創建路徑線
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: 0xff00ff,
+                linewidth: 3,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            pathLine = new THREE.Line(geometry, material);
+            scene.add(pathLine);
+        }
+        
+        // 量子門矩陣（使用複數表示）
+        const gates = {
+            'X': {
+                matrix: [[[0, 0], [1, 0]], [[1, 0], [0, 0]]],
+                axis: new THREE.Vector3(1, 0, 0),
+                angle: Math.PI
+            },
+            'Y': {
+                matrix: [[[0, 0], [0, -1]], [[0, 1], [0, 0]]],
+                axis: new THREE.Vector3(0, 1, 0),
+                angle: Math.PI
+            },
+            'Z': {
+                matrix: [[[1, 0], [0, 0]], [[0, 0], [-1, 0]]],
+                axis: new THREE.Vector3(0, 0, 1),
+                angle: Math.PI
+            },
+            'H': {
+                matrix: [[[1/Math.sqrt(2), 0], [1/Math.sqrt(2), 0]], [[1/Math.sqrt(2), 0], [-1/Math.sqrt(2), 0]]],
+                axis: new THREE.Vector3(1/Math.sqrt(2), 0, 1/Math.sqrt(2)),
+                angle: Math.PI
+            },
+            'S': {
+                matrix: [[[1, 0], [0, 0]], [[0, 0], [0, 1]]],
+                axis: new THREE.Vector3(0, 0, 1),
+                angle: Math.PI / 2
+            },
+            'T': {
+                matrix: [[[1, 0], [0, 0]], [[0, 0], [1/Math.sqrt(2), 1/Math.sqrt(2)]]],
+                axis: new THREE.Vector3(0, 0, 1),
+                angle: Math.PI / 4
+            }
+        };
+        
+        // 複數運算
+        function complexAdd(a, b) {
+            return [a[0] + b[0], a[1] + b[1]];
+        }
+        
+        function complexMultiply(a, b) {
+            return [
+                a[0] * b[0] - a[1] * b[1],
+                a[0] * b[1] + a[1] * b[0]
+            ];
+        }
+        
+        function complexMagnitude(c) {
+            return Math.sqrt(c[0] * c[0] + c[1] * c[1]);
+        }
+        
+        function complexPhase(c) {
+            return Math.atan2(c[1], c[0]);
+        }
+        
+        // 應用量子門（帶動畫）
+        function applyGate(gateName) {
+            if (isAnimating) return;
+            
+            // 暫停自動旋轉
+            const wasAutoRotating = autoRotate;
+            if (autoRotate) {
+                autoRotate = false;
+            }
+            
+            const gate = gates[gateName];
+            const alpha = stateVector[0];
+            const beta = stateVector[1];
+            
+            // 計算新狀態
+            const newAlpha = complexAdd(
+                complexMultiply(gate.matrix[0][0], alpha),
+                complexMultiply(gate.matrix[0][1], beta)
+            );
+            const newBeta = complexAdd(
+                complexMultiply(gate.matrix[1][0], alpha),
+                complexMultiply(gate.matrix[1][1], beta)
+            );
+            
+            // 計算 Bloch 座標
+            const oldCoords = getBlochCoords(stateVector);
+            const newCoords = getBlochCoords([newAlpha, newBeta]);
+            
+            const startVec = new THREE.Vector3(oldCoords.x, oldCoords.y, oldCoords.z);
+            const endVec = new THREE.Vector3(newCoords.x, newCoords.y, newCoords.z);
+            
+            // 顯示旋轉軸
+            showRotationAxis(gate.axis, gate.angle);
+            
+            // 創建球面路徑
+            createSphericalPath(startVec, endVec, gate.axis, gate.angle);
+            
+            // 禁用按鈕和控制
+            setButtonsEnabled(false);
+            isAnimating = true;
+            controls.enabled = false; // 動畫期間禁用相機控制
+            
+            // 更新狀態
+            document.getElementById('animation-status').textContent = 
+                `正在應用 ${gateName} 門：繞 ${getAxisName(gate.axis)} 軸旋轉 ${(gate.angle * 180 / Math.PI).toFixed(0)}°`;
+            
+            // 動畫
+            const duration = parseInt(document.getElementById('speed-slider').value);
+            let progress = { t: 0 };
+            
+            const tween = new TWEEN.Tween(progress)
+                .to({ t: 1 }, duration)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onUpdate(() => {
+                    if (pathCurve) {
+                        const point = pathCurve.getPoint(progress.t);
+                        arrow.setDirection(point.normalize());
+                    }
+                })
+                .onComplete(() => {
+                    stateVector = [newAlpha, newBeta];
+                    
+                    // 更新歷史
+                    const stateString = formatStateVector(newAlpha, newBeta, true);
+                    history.push(`${history.length}. ${gateName} 門 → ${stateString}`);
+                    
+                    updateDisplay();
+                    setButtonsEnabled(true);
+                    isAnimating = false;
+                    controls.enabled = true; // 恢復相機控制
+                    
+                    // 恢復自動旋轉
+                    if (wasAutoRotating) {
+                        autoRotate = true;
+                    }
+                    
+                    document.getElementById('animation-status').textContent = '動畫完成';
+                    
+                    // 淡出路徑
+                    setTimeout(() => {
+                        if (pathLine) {
+                            const fadeOut = new TWEEN.Tween({ opacity: 0.8 })
+                                .to({ opacity: 0 }, 500)
+                                .onUpdate((obj) => {
+                                    if (pathLine && pathLine.material) {
+                                        pathLine.material.opacity = obj.opacity;
+                                    }
+                                })
+                                .onComplete(() => {
+                                    if (pathLine) {
+                                        scene.remove(pathLine);
+                                        pathLine = null;
+                                    }
+                                })
+                                .start();
+                        }
+                    }, 500);
+                })
+                .start();
+        }
+        
+        function getAxisName(axis) {
+            if (Math.abs(axis.x) > 0.9) return 'X';
+            if (Math.abs(axis.y) > 0.9) return 'Y';
+            if (Math.abs(axis.z) > 0.9) return 'Z';
+            return '混合';
+        }
+        
+        function setButtonsEnabled(enabled) {
+            const buttons = document.querySelectorAll('.gate-btn');
+            buttons.forEach(btn => btn.disabled = !enabled);
+        }
+        
+        function getBlochCoords(state) {
+            const alpha = state[0];
+            const beta = state[1];
+            
+            const alphaMag = complexMagnitude(alpha);
+            const betaMag = complexMagnitude(beta);
+            
+            let theta = 2 * Math.acos(Math.min(1, alphaMag));
+            let phi = 0;
+            
+            if (betaMag > 0.001) {
+                phi = complexPhase(beta) - complexPhase(alpha);
+                while (phi < 0) phi += 2 * Math.PI;
+                while (phi > 2 * Math.PI) phi -= 2 * Math.PI;
+            }
+            
+            return {
+                x: Math.sin(theta) * Math.cos(phi),
+                y: Math.sin(theta) * Math.sin(phi),
+                z: Math.cos(theta)
+            };
+        }
+        
+        // 重置狀態
+        function resetState() {
+            if (isAnimating) return;
+            
+            // 移除路徑
+            if (pathLine) {
+                scene.remove(pathLine);
+                pathLine = null;
+            }
+            
+            stateVector = [[1, 0], [0, 0]];
+            history = ['0. 重置 → |0⟩'];
+            updateDisplay();
+            
+            // 重置箭頭
+            arrow.setDirection(new THREE.Vector3(0, 0, 1));
+            
+            document.getElementById('animation-status').textContent = '已重置到 |0⟩';
+        }
+        
+        // 格式化狀態向量（顯示相位）
+        function formatStateVector(alpha, beta, showPhase = false) {
+            const alphaMag = complexMagnitude(alpha);
+            const betaMag = complexMagnitude(beta);
+            
+            if (alphaMag < 0.01) return '|1⟩';
+            if (betaMag < 0.01) return '|0⟩';
+            
+            if (showPhase) {
+                // 檢查是否有負號
+                const alphaPhase = complexPhase(alpha);
+                const betaPhase = complexPhase(beta);
+                const relativePhase = betaPhase - alphaPhase;
+                
+                let result = `${alphaMag.toFixed(2)}|0⟩`;
+                
+                if (Math.abs(relativePhase - Math.PI) < 0.1 || Math.abs(relativePhase + Math.PI) < 0.1) {
+                    result += ` - ${betaMag.toFixed(2)}|1⟩`;
+                } else if (Math.abs(relativePhase - Math.PI/2) < 0.1) {
+                    result += ` + i${betaMag.toFixed(2)}|1⟩`;
+                } else if (Math.abs(relativePhase + Math.PI/2) < 0.1 || Math.abs(relativePhase - 3*Math.PI/2) < 0.1) {
+                    result += ` - i${betaMag.toFixed(2)}|1⟩`;
+                } else {
+                    result += ` + ${betaMag.toFixed(2)}|1⟩`;
+                }
+                
+                return result;
+            }
+            
+            // 簡化顯示
+            return `${alphaMag.toFixed(2)}|0⟩ + ${betaMag.toFixed(2)}|1⟩`;
+        }
+        
+        // 格式化複數狀態
+        function formatComplexState(alpha, beta) {
+            function formatComplex(c) {
+                const real = c[0].toFixed(3);
+                const imag = c[1].toFixed(3);
+                if (Math.abs(c[1]) < 0.001) return real;
+                if (Math.abs(c[0]) < 0.001) return `${imag}i`;
+                return `(${real}${imag >= 0 ? '+' : ''}${imag}i)`;
+            }
+            
+            return `α = ${formatComplex(alpha)}, β = ${formatComplex(beta)}`;
+        }
+        
+        // 更新顯示
+        function updateDisplay() {
+            const alpha = stateVector[0];
+            const beta = stateVector[1];
+            
+            const coords = getBlochCoords(stateVector);
+            
+            // 更新箭頭方向（不在動畫中）
+            if (!isAnimating) {
+                arrow.setDirection(new THREE.Vector3(coords.x, coords.y, coords.z));
+            }
+            
+            // 計算角度
+            const alphaMag = complexMagnitude(alpha);
+            const betaMag = complexMagnitude(beta);
+            
+            let theta = 2 * Math.acos(Math.min(1, alphaMag));
+            let phi = 0;
+            
+            if (betaMag > 0.001) {
+                phi = complexPhase(beta) - complexPhase(alpha);
+                while (phi < 0) phi += 2 * Math.PI;
+                while (phi > 2 * Math.PI) phi -= 2 * Math.PI;
+            }
+            
+            // 更新文字顯示
+            document.getElementById('state-vector').textContent = 
+                `|ψ⟩ = ${formatStateVector(alpha, beta, true)}`;
+            document.getElementById('complex-state').textContent = 
+                formatComplexState(alpha, beta);
+            document.getElementById('bloch-coords').textContent = 
+                `Bloch 座標: (${coords.x.toFixed(2)}, ${coords.y.toFixed(2)}, ${coords.z.toFixed(2)})`;
+            document.getElementById('angles').textContent = 
+                `θ = ${(theta * 180 / Math.PI).toFixed(2)}°, φ = ${(phi * 180 / Math.PI).toFixed(2)}°`;
+            
+            // 更新測量機率
+            const prob0 = alphaMag * alphaMag;
+            const prob1 = betaMag * betaMag;
+            document.getElementById('prob0').textContent = `${(prob0 * 100).toFixed(1)}%`;
+            document.getElementById('prob1').textContent = `${(prob1 * 100).toFixed(1)}%`;
+            document.getElementById('prob0-bar').style.width = `${prob0 * 100}%`;
+            document.getElementById('prob1-bar').style.width = `${prob1 * 100}%`;
+            
+            // 更新歷史
+            const historyHtml = history.slice(-10).map(item => 
+                `<div class="history-item">${item}</div>`
+            ).join('');
+            document.getElementById('history-list').innerHTML = historyHtml;
+            
+            // 自動滾動到底部
+            const historyDiv = document.getElementById('history-list').parentElement;
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+        }
+        
+        // 初始化
+        window.onload = function() {
+            initThreeJS();
+            resetState();
+        };
+        
+        window.onresize = function() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        };
+    </script>
+</body>
+</html>
