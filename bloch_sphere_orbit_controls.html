@@ -776,13 +776,12 @@
         
         // 執行門動畫
         function performGateAnimation(gateName, gate) {
-            if (isAnimating) return;
-            
             // 暫停自動旋轉
             const wasAutoRotating = autoRotate;
             if (autoRotate) {
                 autoRotate = false;
             }
+            
             const alpha = stateVector[0];
             const beta = stateVector[1];
             
