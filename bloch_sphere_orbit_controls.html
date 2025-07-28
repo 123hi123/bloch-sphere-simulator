@@ -118,6 +118,9 @@
         .gate-h { background-color: #ff9800; color: white; }
         .gate-s { background-color: #9c27b0; color: white; }
         .gate-t { background-color: #795548; color: white; }
+        .gate-rx { background-color: #e91e63; color: white; }
+        .gate-ry { background-color: #00bcd4; color: white; }
+        .gate-rz { background-color: #ffc107; color: black; }
         .gate-reset { background-color: #607d8b; color: white; }
         
         .state-info {
@@ -223,6 +226,23 @@
             font-size: 12px;
             z-index: 100;
         }
+        .rotation-controls {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .angle-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .angle-display {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -277,11 +297,33 @@
                             T 門
                             <div class="tooltip">繞 Z 軸旋轉 45°<br>|1⟩ → e^(iπ/4)|1⟩（π/4 相位）</div>
                         </button>
-                        <button class="gate-btn gate-reset" onclick="resetState()" style="grid-column: span 3;">
-                            重置到 |0⟩
-                            <div class="tooltip">回到初始狀態 |0⟩</div>
-                        </button>
                     </div>
+                    
+                    <div class="rotation-controls">
+                        <h4>旋轉門控制</h4>
+                        <div class="angle-display">旋轉角度: <span id="rotation-angle">90</span>°</div>
+                        <input type="range" id="angle-slider" class="angle-slider" 
+                               min="0" max="360" value="90" step="1">
+                        <div class="gate-buttons" style="margin-top: 10px;">
+                            <button class="gate-btn gate-rx" onclick="applyRotationGate('Rx')">
+                                Rx(θ)
+                                <div class="tooltip">繞 X 軸旋轉 θ 度</div>
+                            </button>
+                            <button class="gate-btn gate-ry" onclick="applyRotationGate('Ry')">
+                                Ry(θ)
+                                <div class="tooltip">繞 Y 軸旋轉 θ 度</div>
+                            </button>
+                            <button class="gate-btn gate-rz" onclick="applyRotationGate('Rz')">
+                                Rz(θ)
+                                <div class="tooltip">繞 Z 軸旋轉 θ 度</div>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button class="gate-btn gate-reset" onclick="resetState()" style="width: 100%; margin-top: 10px;">
+                        重置到 |0⟩
+                        <div class="tooltip">回到初始狀態 |0⟩</div>
+                    </button>
                 </div>
                 
                 <div class="animation-controls">
@@ -427,6 +469,13 @@
             speedSlider.addEventListener('input', (e) => {
                 const value = e.target.value / 1000;
                 speedValue.textContent = `${value.toFixed(1)} 秒`;
+            });
+            
+            // 角度滑塊
+            const angleSlider = document.getElementById('angle-slider');
+            const angleDisplay = document.getElementById('rotation-angle');
+            angleSlider.addEventListener('input', (e) => {
+                angleDisplay.textContent = e.target.value;
             });
             
             animate();
@@ -661,8 +710,72 @@
             return Math.atan2(c[1], c[0]);
         }
         
+        // 創建旋轉門矩陣
+        function createRotationGate(axis, angle) {
+            const halfAngle = angle / 2;
+            const cos = Math.cos(halfAngle);
+            const sin = Math.sin(halfAngle);
+            
+            let matrix;
+            if (axis === 'x') {
+                matrix = [
+                    [[cos, 0], [0, -sin]],
+                    [[0, -sin], [cos, 0]]
+                ];
+            } else if (axis === 'y') {
+                matrix = [
+                    [[cos, 0], [-sin, 0]],
+                    [[sin, 0], [cos, 0]]
+                ];
+            } else if (axis === 'z') {
+                matrix = [
+                    [[cos, -sin], [0, 0]],
+                    [[0, 0], [cos, sin]]
+                ];
+            }
+            
+            return matrix;
+        }
+        
+        // 應用旋轉門
+        function applyRotationGate(gateName) {
+            if (isAnimating) return;
+            
+            const angleSlider = document.getElementById('angle-slider');
+            const angleDegrees = parseFloat(angleSlider.value);
+            const angleRadians = angleDegrees * Math.PI / 180;
+            
+            let axis, axisVector;
+            if (gateName === 'Rx') {
+                axis = 'x';
+                axisVector = new THREE.Vector3(1, 0, 0);
+            } else if (gateName === 'Ry') {
+                axis = 'y';
+                axisVector = new THREE.Vector3(0, 1, 0);
+            } else if (gateName === 'Rz') {
+                axis = 'z';
+                axisVector = new THREE.Vector3(0, 0, 1);
+            }
+            
+            const gate = {
+                matrix: createRotationGate(axis, angleRadians),
+                axis: axisVector,
+                angle: angleRadians
+            };
+            
+            performGateAnimation(gateName + `(${angleDegrees}°)`, gate);
+        }
+        
         // 應用量子門（帶動畫）
         function applyGate(gateName) {
+            if (isAnimating) return;
+            
+            const gate = gates[gateName];
+            performGateAnimation(gateName, gate);
+        }
+        
+        // 執行門動畫
+        function performGateAnimation(gateName, gate) {
             if (isAnimating) return;
             
             // 暫停自動旋轉
@@ -670,8 +783,6 @@
             if (autoRotate) {
                 autoRotate = false;
             }
-            
-            const gate = gates[gateName];
             const alpha = stateVector[0];
             const beta = stateVector[1];
             
